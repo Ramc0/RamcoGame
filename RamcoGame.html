@@ -1,189 +1,258 @@
 <!doctype html>
 <html>
-
 <head>
-    <meta charset="utf-8">
-    <title>Juego Isométrico v1.0</title>
-    <style>
-        body {
-            margin: 0;
-            background: #111;
-            overflow: hidden
-        }
-
-        canvas {
-            display: block;
-            margin: auto;
-            background: #eee
-        }
-    </style>
+<meta charset="utf-8">
+<title>Juego Isométrico v2.2</title>
+<style>
+body{margin:0;background:#111;overflow:hidden}
+canvas{display:block;margin:auto;background:#eee}
+</style>
 </head>
-
 <body>
-    <canvas id="lienzo" width="1024" height="768"></canvas>
+<canvas id="lienzo" width="1024" height="768"></canvas>
 
-    <script>
-        const lienzo = document.getElementById("lienzo");
-        const contexto = lienzo.getContext("2d");
+<script>
+const lienzo = document.getElementById("lienzo");
+const contexto = lienzo.getContext("2d");
 
-        const ANCHO = lienzo.width;
-        const ALTO = lienzo.height;
-        const TAM_TILE = 40;
+const ANCHO = lienzo.width;
+const ALTO = lienzo.height;
+const TAM_TILE = 40;
 
-        // ===== MAPA 35x35 =====
-        const TAM_MAPA = 35;
-        const mapa = Array.from({ length: TAM_MAPA }, (_, i) =>
-            Array.from({ length: TAM_MAPA }, (_, j) =>
-                (i === 0 || j === 0 || i === TAM_MAPA - 1 || j === TAM_MAPA - 1 || Math.random() < 0.10) ? 1 : 0
-            )
-        );
+// ===== VARIABLES DE JUEGO =====
+let vidas = 3;
+let juegoTerminado = false;
+let mensaje = "";
+let tiempoInvulnerable = 0;
 
-        // ===== PROYECCIÓN ISOMÉTRICA =====
-        function proyeccionIsometrica(i, j) {
-            return {
-                x: (i - j) * TAM_TILE,
-                y: (i + j) * (TAM_TILE / 2)
-            };
-        }
+// ===== MAPA =====
+const TAM_MAPA = 35;
+const mapa = Array.from({length:TAM_MAPA},(_,i)=>
+  Array.from({length:TAM_MAPA},(_,j)=>
+    (i===0||j===0||i===TAM_MAPA-1||j===TAM_MAPA-1||Math.random()<0.10)?1:0
+  )
+);
 
-        // ===== JUGADOR =====
-        class Jugador {
-            constructor() {
-                this.i = 2;
-                this.j = 2;
-            }
+// ===== PROYECCIÓN ISO =====
+function proyeccionIsometrica(i,j){
+  return {
+    x: (i - j) * TAM_TILE,
+    y: (i + j) * (TAM_TILE/2)
+  };
+}
 
-            mover(di, dj) {
-                let ni = this.i + di;
-                let nj = this.j + dj;
-                if (mapa[ni] && mapa[ni][nj] === 0) {
-                    this.i = ni;
-                    this.j = nj;
-                }
-            }
+// ===== JUGADOR =====
+class Jugador{
+  constructor(){
+    this.i=2;
+    this.j=2;
+  }
 
-            dibujar(camX, camY) {
-                const p = proyeccionIsometrica(this.i, this.j);
+  mover(di,dj){
+    if(juegoTerminado) return;
 
-                contexto.fillStyle = "deepskyblue";
-                contexto.beginPath();
-                contexto.arc(
-                    p.x - camX,
-                    p.y + TAM_TILE / 2 - camY,
-                    12, 0, Math.PI * 2
-                );
-                contexto.fill();
-            }
-        }
+    let ni=this.i+di;
+    let nj=this.j+dj;
+    if(mapa[ni] && mapa[ni][nj]===0){
+      this.i=ni;
+      this.j=nj;
+    }
+  }
 
-        // ===== ENEMIGO =====
-        class Enemigo {
-            constructor(i, j) {
-                this.i = i;
-                this.j = j;
-                this.temporizador = 0;
-                this.direccion = this.direccionAleatoria();
-            }
+  reiniciar(){
+    this.i=2;
+    this.j=2;
+  }
 
-            direccionAleatoria() {
-                const direcciones = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-                return direcciones[Math.floor(Math.random() * 4)];
-            }
+  dibujar(camX,camY){
+    const p=proyeccionIsometrica(this.i,this.j);
 
-            mover() {
-                this.temporizador++;
-                if (this.temporizador < 30) return;
-                this.temporizador = 0;
+    if(tiempoInvulnerable>0 && Math.floor(tiempoInvulnerable/5)%2===0){
+      return;
+    }
 
-                let ni = this.i + this.direccion[0];
-                let nj = this.j + this.direccion[1];
+    contexto.fillStyle="deepskyblue";
+    contexto.beginPath();
+    contexto.arc(
+      p.x - camX,
+      p.y + TAM_TILE/2 - camY,
+      12,0,Math.PI*2
+    );
+    contexto.fill();
+  }
+}
 
-                if (mapa[ni] && mapa[ni][nj] === 0) {
-                    this.i = ni;
-                    this.j = nj;
-                } else {
-                    this.direccion = this.direccionAleatoria();
-                }
-            }
+// ===== ENEMIGO =====
+class Enemigo{
+  constructor(i,j){
+    this.i=i;
+    this.j=j;
+    this.temporizador=0;
+    this.direccion=this.direccionAleatoria();
+  }
 
-            dibujar(camX, camY) {
-                const p = proyeccionIsometrica(this.i, this.j);
+  direccionAleatoria(){
+    const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+    return dirs[Math.floor(Math.random()*4)];
+  }
 
-                contexto.fillStyle = "crimson";
-                contexto.beginPath();
-                contexto.arc(
-                    p.x - camX,
-                    p.y + TAM_TILE / 2 - camY,
-                    12, 0, Math.PI * 2
-                );
-                contexto.fill();
-            }
-        }
+  mover(){
+    if(juegoTerminado) return;
 
-        // ===== DIBUJAR MAPA =====
-        function dibujarMapa(camX, camY) {
-            for (let i = 0; i < TAM_MAPA; i++) {
-                for (let j = 0; j < TAM_MAPA; j++) {
-                    const p = proyeccionIsometrica(i, j);
+    this.temporizador++;
+    if(this.temporizador<30) return;
+    this.temporizador=0;
 
-                    contexto.beginPath();
-                    contexto.moveTo(p.x - camX, p.y - camY);
-                    contexto.lineTo(p.x + TAM_TILE - camX, p.y + TAM_TILE / 2 - camY);
-                    contexto.lineTo(p.x - camX, p.y + TAM_TILE - camY);
-                    contexto.lineTo(p.x - TAM_TILE - camX, p.y + TAM_TILE / 2 - camY);
-                    contexto.closePath();
+    let ni=this.i+this.direccion[0];
+    let nj=this.j+this.direccion[1];
 
-                    if (mapa[i][j] === 1) {
-                        contexto.fillStyle = "#444";
-                        contexto.fill();
-                    }
+    if(mapa[ni] && mapa[ni][nj]===0){
+      this.i=ni;
+      this.j=nj;
+    } else {
+      this.direccion=this.direccionAleatoria();
+    }
+  }
 
-                    contexto.strokeStyle = "#222";
-                    contexto.stroke();
-                }
-            }
-        }
+  dibujar(camX,camY){
+    const p=proyeccionIsometrica(this.i,this.j);
+    contexto.fillStyle="crimson";
+    contexto.beginPath();
+    contexto.arc(
+      p.x - camX,
+      p.y + TAM_TILE/2 - camY,
+      12,0,Math.PI*2
+    );
+    contexto.fill();
+  }
+}
 
-        // ===== INICIALIZACIÓN =====
-        const jugador = new Jugador();
-        const enemigos = [
-            new Enemigo(10, 10),
-            new Enemigo(25, 20),
-            new Enemigo(15, 30),
-            new Enemigo(30, 8)
-        ];
+// ===== COLISIONES =====
+function comprobarColisiones(){
 
-        // ===== CONTROLES =====
-        document.addEventListener("keydown", evento => {
-            if (evento.key === "w") jugador.mover(-1, 0);
-            if (evento.key === "s") jugador.mover(1, 0);
-            if (evento.key === "a") jugador.mover(0, 1);
-            if (evento.key === "d") jugador.mover(0, -1);
-        });
+  // 🔒 NO comprobar si el juego terminó
+  if(juegoTerminado) return;
 
-        // ===== BUCLE PRINCIPAL =====
-        function bucleJuego() {
+  if(tiempoInvulnerable>0) return;
 
-            const posicionJugador = proyeccionIsometrica(jugador.i, jugador.j);
-            const camX = posicionJugador.x - ANCHO / 2;
-            const camY = posicionJugador.y - ALTO / 2;
+  enemigos.forEach(enemigo=>{
+    if(enemigo.i===jugador.i && enemigo.j===jugador.j){
 
-            contexto.clearRect(0, 0, ANCHO, ALTO);
+      vidas--;
+      tiempoInvulnerable = 60;
 
-            dibujarMapa(camX, camY);
+      if(vidas<=0){
+        vidas = 0; // seguridad extra
+        mensaje="💀 GAME OVER";
+        juegoTerminado=true;
+      } else {
+        mensaje="☠️ Has perdido una vida";
+      }
+    }
+  });
+}
 
-            enemigos.forEach(enemigo => {
-                enemigo.mover();
-                enemigo.dibujar(camX, camY);
-            });
+// ===== MAPA =====
+function dibujarMapa(camX,camY){
+  for(let i=0;i<TAM_MAPA;i++){
+    for(let j=0;j<TAM_MAPA;j++){
+      const p=proyeccionIsometrica(i,j);
 
-            jugador.dibujar(camX, camY);
+      contexto.beginPath();
+      contexto.moveTo(p.x-camX, p.y-camY);
+      contexto.lineTo(p.x+TAM_TILE-camX, p.y+TAM_TILE/2-camY);
+      contexto.lineTo(p.x-camX, p.y+TAM_TILE-camY);
+      contexto.lineTo(p.x-TAM_TILE-camX, p.y+TAM_TILE/2-camY);
+      contexto.closePath();
 
-            requestAnimationFrame(bucleJuego);
-        }
+      if(mapa[i][j]===1){
+        contexto.fillStyle="#444";
+        contexto.fill();
+      }
 
-        bucleJuego();
-    </script>
+      contexto.strokeStyle="#222";
+      contexto.stroke();
+    }
+  }
+}
+
+// ===== HUD =====
+function dibujarHUD(){
+  contexto.fillStyle="black";
+  contexto.fillRect(0,0,ANCHO,40);
+
+  contexto.fillStyle="white";
+  contexto.font="18px Arial";
+  contexto.fillText("Vidas: "+vidas,20,25);
+
+  if(juegoTerminado){
+    contexto.fillStyle="rgba(0,0,0,0.7)";
+    contexto.fillRect(ANCHO/2-200,ALTO/2-60,400,120);
+
+    contexto.fillStyle="white";
+    contexto.font="26px Arial";
+    contexto.textAlign="center";
+    contexto.fillText(mensaje,ANCHO/2,ALTO/2);
+    contexto.font="16px Arial";
+    contexto.fillText("Pulsa ENTER para reiniciar",ANCHO/2,ALTO/2+30);
+    contexto.textAlign="left";
+  }
+}
+
+// ===== INICIALIZACIÓN =====
+const jugador=new Jugador();
+const enemigos=[
+  new Enemigo(10,10),
+  new Enemigo(25,20),
+  new Enemigo(15,30),
+  new Enemigo(30,8)
+];
+
+// ===== CONTROLES =====
+document.addEventListener("keydown",evento=>{
+  if(juegoTerminado && evento.key==="Enter"){
+    vidas=3;
+    jugador.reiniciar();
+    juegoTerminado=false;
+    mensaje="";
+    return;
+  }
+
+  if(evento.key==="w") jugador.mover(-1,0);
+  if(evento.key==="s") jugador.mover(1,0);
+  if(evento.key==="a") jugador.mover(0,1);
+  if(evento.key==="d") jugador.mover(0,-1);
+});
+
+// ===== BUCLE =====
+function bucleJuego(){
+
+  if(tiempoInvulnerable>0){
+    tiempoInvulnerable--;
+  }
+
+  const posJugador=proyeccionIsometrica(jugador.i,jugador.j);
+  const camX=posJugador.x-ANCHO/2;
+  const camY=posJugador.y-ALTO/2;
+
+  contexto.clearRect(0,0,ANCHO,ALTO);
+
+  dibujarMapa(camX,camY);
+
+  enemigos.forEach(e=>{
+    e.mover();
+    e.dibujar(camX,camY);
+  });
+
+  jugador.dibujar(camX,camY);
+
+  comprobarColisiones();
+  dibujarHUD();
+
+  requestAnimationFrame(bucleJuego);
+}
+
+bucleJuego();
+</script>
 </body>
-
 </html>
