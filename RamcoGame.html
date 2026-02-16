@@ -1,258 +1,352 @@
 <!doctype html>
 <html>
+
 <head>
-<meta charset="utf-8">
-<title>Juego Isométrico v2.2</title>
-<style>
-body{margin:0;background:#111;overflow:hidden}
-canvas{display:block;margin:auto;background:#eee}
-</style>
+    <meta charset="utf-8">
+    <title>Juego Isométrico v3.0</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #0e0e0e;
+        }
+
+        canvas {
+            display: block;
+            background: #1a1a1a;
+        }
+    </style>
 </head>
+
 <body>
-<canvas id="lienzo" width="1024" height="768"></canvas>
+    <canvas id="lienzo"></canvas>
 
-<script>
-const lienzo = document.getElementById("lienzo");
-const contexto = lienzo.getContext("2d");
+    <script>
+        const lienzo = document.getElementById("lienzo");
+        const ctx = lienzo.getContext("2d");
 
-const ANCHO = lienzo.width;
-const ALTO = lienzo.height;
-const TAM_TILE = 40;
+        function ajustarPantalla() {
+            lienzo.width = window.innerWidth;
+            lienzo.height = window.innerHeight;
+        }
+        window.addEventListener("resize", ajustarPantalla);
+        ajustarPantalla();
 
-// ===== VARIABLES DE JUEGO =====
-let vidas = 3;
-let juegoTerminado = false;
-let mensaje = "";
-let tiempoInvulnerable = 0;
+        const TAM_TILE = 40;
+        const TAM_MAPA = 35;
 
-// ===== MAPA =====
-const TAM_MAPA = 35;
-const mapa = Array.from({length:TAM_MAPA},(_,i)=>
-  Array.from({length:TAM_MAPA},(_,j)=>
-    (i===0||j===0||i===TAM_MAPA-1||j===TAM_MAPA-1||Math.random()<0.10)?1:0
-  )
-);
+        let vidas = 3;
+        let nivel = 1;
+        let juegoTerminado = false;
+        let juegoPausado = false;
+        let mensaje = "";
+        let tiempoInvulnerable = 0;
 
-// ===== PROYECCIÓN ISO =====
-function proyeccionIsometrica(i,j){
-  return {
-    x: (i - j) * TAM_TILE,
-    y: (i + j) * (TAM_TILE/2)
-  };
-}
+        let mapa;
+        let monedas = [];
+        let enemigos = [];
 
-// ===== JUGADOR =====
-class Jugador{
-  constructor(){
-    this.i=2;
-    this.j=2;
-  }
+        // ===== MAPA =====
+        function generarMapa() {
+            mapa = Array.from({ length: TAM_MAPA }, (_, i) =>
+                Array.from({ length: TAM_MAPA }, (_, j) =>
+                    (i === 0 || j === 0 || i === TAM_MAPA - 1 || j === TAM_MAPA - 1 || Math.random() < 0.10) ? 1 : 0
+                )
+            );
+        }
 
-  mover(di,dj){
-    if(juegoTerminado) return;
+        function iso(i, j) {
+            return {
+                x: (i - j) * TAM_TILE,
+                y: (i + j) * (TAM_TILE / 2)
+            };
+        }
 
-    let ni=this.i+di;
-    let nj=this.j+dj;
-    if(mapa[ni] && mapa[ni][nj]===0){
-      this.i=ni;
-      this.j=nj;
-    }
-  }
+        // ===== JUGADOR =====
+        class Jugador {
+            constructor() {
+                this.i = 2;
+                this.j = 2;
+                this.monedasRecogidas = 0;
+            }
 
-  reiniciar(){
-    this.i=2;
-    this.j=2;
-  }
+            mover(di, dj) {
+                if (juegoTerminado || juegoPausado) return;
+                let ni = this.i + di, nj = this.j + dj;
+                if (mapa[ni] && mapa[ni][nj] === 0) {
+                    this.i = ni; this.j = nj;
+                }
+            }
 
-  dibujar(camX,camY){
-    const p=proyeccionIsometrica(this.i,this.j);
+            reiniciar() {
+                this.i = 2;
+                this.j = 2;
+                this.monedasRecogidas = 0;
+            }
 
-    if(tiempoInvulnerable>0 && Math.floor(tiempoInvulnerable/5)%2===0){
-      return;
-    }
+            dibujar(camX, camY) {
+                const p = iso(this.i, this.j);
 
-    contexto.fillStyle="deepskyblue";
-    contexto.beginPath();
-    contexto.arc(
-      p.x - camX,
-      p.y + TAM_TILE/2 - camY,
-      12,0,Math.PI*2
-    );
-    contexto.fill();
-  }
-}
+                if (tiempoInvulnerable > 0 && Math.floor(tiempoInvulnerable / 5) % 2 === 0) return;
 
-// ===== ENEMIGO =====
-class Enemigo{
-  constructor(i,j){
-    this.i=i;
-    this.j=j;
-    this.temporizador=0;
-    this.direccion=this.direccionAleatoria();
-  }
+                ctx.fillStyle = "rgba(0,0,0,0.3)";
+                ctx.beginPath();
+                ctx.ellipse(p.x - camX, p.y + TAM_TILE / 2 - camY + 10, 12, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
 
-  direccionAleatoria(){
-    const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
-    return dirs[Math.floor(Math.random()*4)];
-  }
+                ctx.fillStyle = "#00bfff";
+                ctx.beginPath();
+                ctx.arc(p.x - camX, p.y + TAM_TILE / 2 - camY, 12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
 
-  mover(){
-    if(juegoTerminado) return;
+        // ===== ENEMIGO =====
+        class Enemigo {
+            constructor(i, j) {
+                this.i = i;
+                this.j = j;
+                this.timer = 0;
+                this.dir = this.randomDir();
+            }
 
-    this.temporizador++;
-    if(this.temporizador<30) return;
-    this.temporizador=0;
+            randomDir() {
+                const d = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                return d[Math.floor(Math.random() * 4)];
+            }
 
-    let ni=this.i+this.direccion[0];
-    let nj=this.j+this.direccion[1];
+            mover() {
+                if (juegoTerminado || juegoPausado) return;
 
-    if(mapa[ni] && mapa[ni][nj]===0){
-      this.i=ni;
-      this.j=nj;
-    } else {
-      this.direccion=this.direccionAleatoria();
-    }
-  }
+                this.timer++;
+                if (this.timer < 25) return;
+                this.timer = 0;
 
-  dibujar(camX,camY){
-    const p=proyeccionIsometrica(this.i,this.j);
-    contexto.fillStyle="crimson";
-    contexto.beginPath();
-    contexto.arc(
-      p.x - camX,
-      p.y + TAM_TILE/2 - camY,
-      12,0,Math.PI*2
-    );
-    contexto.fill();
-  }
-}
+                let ni = this.i + this.dir[0];
+                let nj = this.j + this.dir[1];
 
-// ===== COLISIONES =====
-function comprobarColisiones(){
+                if (mapa[ni] && mapa[ni][nj] === 0) {
+                    this.i = ni; this.j = nj;
+                } else {
+                    this.dir = this.randomDir();
+                }
+            }
 
-  // 🔒 NO comprobar si el juego terminó
-  if(juegoTerminado) return;
+            dibujar(camX, camY) {
+                const p = iso(this.i, this.j);
 
-  if(tiempoInvulnerable>0) return;
+                ctx.fillStyle = "rgba(0,0,0,0.3)";
+                ctx.beginPath();
+                ctx.ellipse(p.x - camX, p.y + TAM_TILE / 2 - camY + 10, 12, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
 
-  enemigos.forEach(enemigo=>{
-    if(enemigo.i===jugador.i && enemigo.j===jugador.j){
+                ctx.fillStyle = "#ff3b3b";
+                ctx.beginPath();
+                ctx.arc(p.x - camX, p.y + TAM_TILE / 2 - camY, 12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
 
-      vidas--;
-      tiempoInvulnerable = 60;
+        // ===== MONEDA =====
+        class Moneda {
+            constructor(i, j) { this.i = i; this.j = j; }
+            dibujar(camX, camY) {
+                const p = iso(this.i, this.j);
 
-      if(vidas<=0){
-        vidas = 0; // seguridad extra
-        mensaje="💀 GAME OVER";
-        juegoTerminado=true;
-      } else {
-        mensaje="☠️ Has perdido una vida";
-      }
-    }
-  });
-}
+                ctx.fillStyle = "gold";
+                ctx.beginPath();
+                ctx.arc(p.x - camX, p.y + TAM_TILE / 2 - camY, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
 
-// ===== MAPA =====
-function dibujarMapa(camX,camY){
-  for(let i=0;i<TAM_MAPA;i++){
-    for(let j=0;j<TAM_MAPA;j++){
-      const p=proyeccionIsometrica(i,j);
+        // ===== GENERADORES =====
+        function generarMonedas() {
+            monedas = [];
+            const total = 3 + nivel; // Nivel 1 = 4
+            for (let i = 0; i < total; i++) {
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * TAM_MAPA);
+                    y = Math.floor(Math.random() * TAM_MAPA);
+                } while (mapa[x][y] !== 0);
+                monedas.push(new Moneda(x, y));
+            }
+        }
 
-      contexto.beginPath();
-      contexto.moveTo(p.x-camX, p.y-camY);
-      contexto.lineTo(p.x+TAM_TILE-camX, p.y+TAM_TILE/2-camY);
-      contexto.lineTo(p.x-camX, p.y+TAM_TILE-camY);
-      contexto.lineTo(p.x-TAM_TILE-camX, p.y+TAM_TILE/2-camY);
-      contexto.closePath();
+        function generarEnemigos() {
+            enemigos = [];
+            const total = 2 + nivel; // Nivel 1 = 3
+            for (let i = 0; i < total; i++) {
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * TAM_MAPA);
+                    y = Math.floor(Math.random() * TAM_MAPA);
+                } while (mapa[x][y] !== 0);
+                enemigos.push(new Enemigo(x, y));
+            }
+        }
 
-      if(mapa[i][j]===1){
-        contexto.fillStyle="#444";
-        contexto.fill();
-      }
+        // ===== COLISIONES =====
+        function comprobarColisiones() {
+            if (juegoTerminado || juegoPausado) return;
 
-      contexto.strokeStyle="#222";
-      contexto.stroke();
-    }
-  }
-}
+            monedas = monedas.filter(m => {
+                if (m.i === jugador.i && m.j === jugador.j) {
+                    jugador.monedasRecogidas++;
+                    return false;
+                }
+                return true;
+            });
 
-// ===== HUD =====
-function dibujarHUD(){
-  contexto.fillStyle="black";
-  contexto.fillRect(0,0,ANCHO,40);
+            if (monedas.length === 0) {
+                mensaje = "🎉 NIVEL SUPERADO";
+                juegoTerminado = true;
+                nivel++;
+            }
 
-  contexto.fillStyle="white";
-  contexto.font="18px Arial";
-  contexto.fillText("Vidas: "+vidas,20,25);
+            if (tiempoInvulnerable > 0) return;
 
-  if(juegoTerminado){
-    contexto.fillStyle="rgba(0,0,0,0.7)";
-    contexto.fillRect(ANCHO/2-200,ALTO/2-60,400,120);
+            enemigos.forEach(e => {
+                if (e.i === jugador.i && e.j === jugador.j) {
+                    vidas--;
+                    tiempoInvulnerable = 60;
+                    if (vidas <= 0) {
+                        vidas = 0;
+                        mensaje = "💀 GAME OVER";
+                        juegoTerminado = true;
+                    }
+                }
+            });
+        }
 
-    contexto.fillStyle="white";
-    contexto.font="26px Arial";
-    contexto.textAlign="center";
-    contexto.fillText(mensaje,ANCHO/2,ALTO/2);
-    contexto.font="16px Arial";
-    contexto.fillText("Pulsa ENTER para reiniciar",ANCHO/2,ALTO/2+30);
-    contexto.textAlign="left";
-  }
-}
+        // ===== HUD =====
+        function dibujarHUD() {
 
-// ===== INICIALIZACIÓN =====
-const jugador=new Jugador();
-const enemigos=[
-  new Enemigo(10,10),
-  new Enemigo(25,20),
-  new Enemigo(15,30),
-  new Enemigo(30,8)
-];
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, 0, lienzo.width, 60);
 
-// ===== CONTROLES =====
-document.addEventListener("keydown",evento=>{
-  if(juegoTerminado && evento.key==="Enter"){
-    vidas=3;
-    jugador.reiniciar();
-    juegoTerminado=false;
-    mensaje="";
-    return;
-  }
+            ctx.fillStyle = "#00ffcc";
+            ctx.font = "18px Arial";
+            ctx.fillText("Nivel: " + nivel, 20, 35);
 
-  if(evento.key==="w") jugador.mover(-1,0);
-  if(evento.key==="s") jugador.mover(1,0);
-  if(evento.key==="a") jugador.mover(0,1);
-  if(evento.key==="d") jugador.mover(0,-1);
-});
+            ctx.fillStyle = "#ff6666";
+            ctx.fillText("Vidas: " + vidas, 140, 35);
 
-// ===== BUCLE =====
-function bucleJuego(){
+            ctx.fillStyle = "#ffd700";
+            ctx.fillText("Monedas: " + jugador.monedasRecogidas, 260, 35);
 
-  if(tiempoInvulnerable>0){
-    tiempoInvulnerable--;
-  }
+            if (juegoTerminado) {
+                ctx.fillStyle = "rgba(0,0,0,0.75)";
+                ctx.fillRect(0, 0, lienzo.width, lienzo.height);
 
-  const posJugador=proyeccionIsometrica(jugador.i,jugador.j);
-  const camX=posJugador.x-ANCHO/2;
-  const camY=posJugador.y-ALTO/2;
+                ctx.fillStyle = "white";
+                ctx.textAlign = "center";
+                ctx.font = "40px Arial";
+                ctx.fillText(mensaje, lienzo.width / 2, lienzo.height / 2);
 
-  contexto.clearRect(0,0,ANCHO,ALTO);
+                ctx.font = "20px Arial";
+                ctx.fillText("Pulsa ENTER para continuar",
+                    lienzo.width / 2,
+                    lienzo.height / 2 + 50);
 
-  dibujarMapa(camX,camY);
+                ctx.textAlign = "left";
+            }
 
-  enemigos.forEach(e=>{
-    e.mover();
-    e.dibujar(camX,camY);
-  });
+            if (juegoPausado) {
+                ctx.fillStyle = "rgba(0,0,0,0.7)";
+                ctx.fillRect(0, 0, lienzo.width, lienzo.height);
 
-  jugador.dibujar(camX,camY);
+                ctx.fillStyle = "white";
+                ctx.textAlign = "center";
+                ctx.font = "40px Arial";
+                ctx.fillText("⏸ PAUSA",
+                    lienzo.width / 2,
+                    lienzo.height / 2);
 
-  comprobarColisiones();
-  dibujarHUD();
+                ctx.textAlign = "left";
+            }
+        }
 
-  requestAnimationFrame(bucleJuego);
-}
+        // ===== MAPA =====
+        function dibujarMapa(camX, camY) {
+            for (let i = 0; i < TAM_MAPA; i++) {
+                for (let j = 0; j < TAM_MAPA; j++) {
+                    const p = iso(i, j);
 
-bucleJuego();
-</script>
+                    ctx.beginPath();
+                    ctx.moveTo(p.x - camX, p.y - camY);
+                    ctx.lineTo(p.x + TAM_TILE - camX, p.y + TAM_TILE / 2 - camY);
+                    ctx.lineTo(p.x - camX, p.y + TAM_TILE - camY);
+                    ctx.lineTo(p.x - TAM_TILE - camX, p.y + TAM_TILE / 2 - camY);
+                    ctx.closePath();
+
+                    ctx.fillStyle = mapa[i][j] === 1 ? "#2b2b2b" : "#1e3d2f";
+                    ctx.fill();
+                    ctx.strokeStyle = "#111";
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // ===== NIVEL =====
+        function iniciarNivel() {
+            generarMapa();
+            generarMonedas();
+            generarEnemigos();
+            jugador.reiniciar();
+            juegoTerminado = false;
+            mensaje = "";
+        }
+
+        // ===== CONTROLES =====
+        document.addEventListener("keydown", e => {
+
+            if (e.key === "p" || e.key === "P") {
+                juegoPausado = !juegoPausado;
+            }
+
+            if (juegoTerminado && e.key === "Enter") {
+                if (vidas <= 0) {
+                    vidas = 3;
+                    nivel = 1;
+                }
+                iniciarNivel();
+                return;
+            }
+
+            if (e.key === "w") jugador.mover(-1, 0);
+            if (e.key === "s") jugador.mover(1, 0);
+            if (e.key === "a") jugador.mover(0, 1);
+            if (e.key === "d") jugador.mover(0, -1);
+        });
+
+        // ===== BUCLE =====
+        function bucle() {
+
+            if (tiempoInvulnerable > 0) tiempoInvulnerable--;
+
+            const pos = iso(jugador.i, jugador.j);
+            const camX = pos.x - lienzo.width / 2;
+            const camY = pos.y - lienzo.height / 2;
+
+            ctx.clearRect(0, 0, lienzo.width, lienzo.height);
+
+            dibujarMapa(camX, camY);
+            monedas.forEach(m => m.dibujar(camX, camY));
+            enemigos.forEach(e => { e.mover(); e.dibujar(camX, camY); });
+            jugador.dibujar(camX, camY);
+
+            comprobarColisiones();
+            dibujarHUD();
+
+            requestAnimationFrame(bucle);
+        }
+
+        const jugador = new Jugador();
+        iniciarNivel();
+        bucle();
+    </script>
 </body>
+
 </html>
