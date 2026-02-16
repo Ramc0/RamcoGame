@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Juego Isométrico v1.0</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            overflow: hidden
+        }
+
+        canvas {
+            display: block;
+            margin: auto;
+            background: #eee
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="lienzo" width="1024" height="768"></canvas>
+
+    <script>
+        const lienzo = document.getElementById("lienzo");
+        const contexto = lienzo.getContext("2d");
+
+        const ANCHO = lienzo.width;
+        const ALTO = lienzo.height;
+        const TAM_TILE = 40;
+
+        // ===== MAPA 35x35 =====
+        const TAM_MAPA = 35;
+        const mapa = Array.from({ length: TAM_MAPA }, (_, i) =>
+            Array.from({ length: TAM_MAPA }, (_, j) =>
+                (i === 0 || j === 0 || i === TAM_MAPA - 1 || j === TAM_MAPA - 1 || Math.random() < 0.10) ? 1 : 0
+            )
+        );
+
+        // ===== PROYECCIÓN ISOMÉTRICA =====
+        function proyeccionIsometrica(i, j) {
+            return {
+                x: (i - j) * TAM_TILE,
+                y: (i + j) * (TAM_TILE / 2)
+            };
+        }
+
+        // ===== JUGADOR =====
+        class Jugador {
+            constructor() {
+                this.i = 2;
+                this.j = 2;
+            }
+
+            mover(di, dj) {
+                let ni = this.i + di;
+                let nj = this.j + dj;
+                if (mapa[ni] && mapa[ni][nj] === 0) {
+                    this.i = ni;
+                    this.j = nj;
+                }
+            }
+
+            dibujar(camX, camY) {
+                const p = proyeccionIsometrica(this.i, this.j);
+
+                contexto.fillStyle = "deepskyblue";
+                contexto.beginPath();
+                contexto.arc(
+                    p.x - camX,
+                    p.y + TAM_TILE / 2 - camY,
+                    12, 0, Math.PI * 2
+                );
+                contexto.fill();
+            }
+        }
+
+        // ===== ENEMIGO =====
+        class Enemigo {
+            constructor(i, j) {
+                this.i = i;
+                this.j = j;
+                this.temporizador = 0;
+                this.direccion = this.direccionAleatoria();
+            }
+
+            direccionAleatoria() {
+                const direcciones = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                return direcciones[Math.floor(Math.random() * 4)];
+            }
+
+            mover() {
+                this.temporizador++;
+                if (this.temporizador < 30) return;
+                this.temporizador = 0;
+
+                let ni = this.i + this.direccion[0];
+                let nj = this.j + this.direccion[1];
+
+                if (mapa[ni] && mapa[ni][nj] === 0) {
+                    this.i = ni;
+                    this.j = nj;
+                } else {
+                    this.direccion = this.direccionAleatoria();
+                }
+            }
+
+            dibujar(camX, camY) {
+                const p = proyeccionIsometrica(this.i, this.j);
+
+                contexto.fillStyle = "crimson";
+                contexto.beginPath();
+                contexto.arc(
+                    p.x - camX,
+                    p.y + TAM_TILE / 2 - camY,
+                    12, 0, Math.PI * 2
+                );
+                contexto.fill();
+            }
+        }
+
+        // ===== DIBUJAR MAPA =====
+        function dibujarMapa(camX, camY) {
+            for (let i = 0; i < TAM_MAPA; i++) {
+                for (let j = 0; j < TAM_MAPA; j++) {
+                    const p = proyeccionIsometrica(i, j);
+
+                    contexto.beginPath();
+                    contexto.moveTo(p.x - camX, p.y - camY);
+                    contexto.lineTo(p.x + TAM_TILE - camX, p.y + TAM_TILE / 2 - camY);
+                    contexto.lineTo(p.x - camX, p.y + TAM_TILE - camY);
+                    contexto.lineTo(p.x - TAM_TILE - camX, p.y + TAM_TILE / 2 - camY);
+                    contexto.closePath();
+
+                    if (mapa[i][j] === 1) {
+                        contexto.fillStyle = "#444";
+                        contexto.fill();
+                    }
+
+                    contexto.strokeStyle = "#222";
+                    contexto.stroke();
+                }
+            }
+        }
+
+        // ===== INICIALIZACIÓN =====
+        const jugador = new Jugador();
+        const enemigos = [
+            new Enemigo(10, 10),
+            new Enemigo(25, 20),
+            new Enemigo(15, 30),
+            new Enemigo(30, 8)
+        ];
+
+        // ===== CONTROLES =====
+        document.addEventListener("keydown", evento => {
+            if (evento.key === "w") jugador.mover(-1, 0);
+            if (evento.key === "s") jugador.mover(1, 0);
+            if (evento.key === "a") jugador.mover(0, 1);
+            if (evento.key === "d") jugador.mover(0, -1);
+        });
+
+        // ===== BUCLE PRINCIPAL =====
+        function bucleJuego() {
+
+            const posicionJugador = proyeccionIsometrica(jugador.i, jugador.j);
+            const camX = posicionJugador.x - ANCHO / 2;
+            const camY = posicionJugador.y - ALTO / 2;
+
+            contexto.clearRect(0, 0, ANCHO, ALTO);
+
+            dibujarMapa(camX, camY);
+
+            enemigos.forEach(enemigo => {
+                enemigo.mover();
+                enemigo.dibujar(camX, camY);
+            });
+
+            jugador.dibujar(camX, camY);
+
+            requestAnimationFrame(bucleJuego);
+        }
+
+        bucleJuego();
+    </script>
+</body>
+
+</html>
