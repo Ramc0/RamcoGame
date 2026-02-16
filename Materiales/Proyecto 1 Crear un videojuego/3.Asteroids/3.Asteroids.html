@@ -1,0 +1,330 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Asteroids Neon</title>
+<style>
+html,body{
+  margin:0;
+  padding:0;
+  overflow:hidden;
+  background:black;
+  font-family:monospace;
+}
+canvas{display:block}
+</style>
+</head>
+<body>
+<canvas></canvas>
+
+<script>
+// ================= UTILIDADES =================
+function distancia(x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1;
+  return Math.hypot(dx,dy);
+}
+function rand(min,max){ return Math.random()*(max-min)+min }
+
+// ================= SETUP =================
+const anchura = window.innerWidth;
+const altura  = window.innerHeight;
+const lienzo = document.querySelector("canvas");
+lienzo.width = anchura;
+lienzo.height = altura;
+const contexto = lienzo.getContext("2d");
+
+// ================= CLASES =================
+
+class Jugador{
+  constructor(){
+    this.posx = anchura/2;
+    this.posy = altura/2;
+    this.angulo = 0;
+    this.velx = 0;
+    this.vely = 0;
+    this.aceleracion = 0.18;
+    this.rozamiento = 0.995;
+    this.velMax = 8;
+  }
+
+  dibuja(){
+    contexto.save();
+
+    contexto.shadowColor = "cyan";
+    contexto.shadowBlur = 15;
+
+    const noseLen = 22, baseLen = 14, spread = Math.PI*0.75;
+    const noseX = this.posx + Math.cos(this.angulo)*noseLen;
+    const noseY = this.posy + Math.sin(this.angulo)*noseLen;
+    const leftX = this.posx + Math.cos(this.angulo + spread)*baseLen;
+    const leftY = this.posy + Math.sin(this.angulo + spread)*baseLen;
+    const rightX= this.posx + Math.cos(this.angulo - spread)*baseLen;
+    const rightY= this.posy + Math.sin(this.angulo - spread)*baseLen;
+
+    contexto.fillStyle = "white";
+    contexto.beginPath();
+    contexto.moveTo(noseX,noseY);
+    contexto.lineTo(leftX,leftY);
+    contexto.lineTo(rightX,rightY);
+    contexto.closePath();
+    contexto.fill();
+
+    if(thrust){
+      contexto.shadowColor = "orange";
+      contexto.fillStyle = "orange";
+      contexto.beginPath();
+      contexto.moveTo(leftX,leftY);
+      contexto.lineTo(
+        this.posx - Math.cos(this.angulo)*25,
+        this.posy - Math.sin(this.angulo)*25
+      );
+      contexto.lineTo(rightX,rightY);
+      contexto.closePath();
+      contexto.fill();
+    }
+
+    contexto.restore();
+  }
+
+  aplicaThrust(on){
+    if(!on) return;
+    this.velx += Math.cos(this.angulo)*this.aceleracion;
+    this.vely += Math.sin(this.angulo)*this.aceleracion;
+    const v = Math.hypot(this.velx,this.vely);
+    if(v > this.velMax){
+      const f = this.velMax/v;
+      this.velx *= f;
+      this.vely *= f;
+    }
+  }
+
+  mueve(){
+    this.velx *= this.rozamiento;
+    this.vely *= this.rozamiento;
+    this.posx += this.velx;
+    this.posy += this.vely;
+
+    if(this.posx < 0) this.posx += anchura;
+    if(this.posx > anchura) this.posx -= anchura;
+    if(this.posy < 0) this.posy += altura;
+    if(this.posy > altura) this.posy -= altura;
+  }
+}
+
+class Bala{
+  constructor(x,y,a){
+    this.posx = x;
+    this.posy = y;
+    this.angulo = a;
+    this.velocidad = 12;
+  }
+  dibuja(){
+    contexto.save();
+    contexto.shadowColor = "dodgerblue";
+    contexto.shadowBlur = 10;
+    contexto.fillStyle = "dodgerblue";
+    contexto.beginPath();
+    contexto.arc(this.posx,this.posy,3,0,Math.PI*2);
+    contexto.fill();
+    contexto.restore();
+  }
+  mueve(){
+    this.posx += Math.cos(this.angulo)*this.velocidad;
+    this.posy += Math.sin(this.angulo)*this.velocidad;
+  }
+}
+
+class Estrella{
+  constructor(){
+    this.posx = Math.random()*anchura;
+    this.posy = Math.random()*altura;
+    this.size = Math.random()*2;
+    this.alpha = Math.random();
+  }
+  dibuja(){
+    this.alpha += (Math.random()-0.5)*0.05;
+    this.alpha = Math.max(0.1, Math.min(1,this.alpha));
+    contexto.fillStyle = `rgba(255,255,255,${this.alpha})`;
+    contexto.beginPath();
+    contexto.arc(this.posx,this.posy,this.size,0,Math.PI*2);
+    contexto.fill();
+  }
+}
+
+class Roca{
+  constructor(){
+    this.radio = Math.random()*20+10;
+    let ok=false;
+    while(!ok){
+      this.posx = Math.random()*anchura;
+      this.posy = Math.random()*altura;
+      ok = distancia(this.posx,this.posy,jugador.posx,jugador.posy) > 80;
+    }
+    this.angulo = Math.random()*Math.PI*2;
+    this.lados = Math.round(Math.random()*20+5);
+    const rugosidad = 0.4;
+    this.puntas = Array.from({length:this.lados},
+      ()=>1+(Math.random()*2-1)*rugosidad);
+
+    const v = Math.random()*1.6+0.4;
+    const dir = Math.random()*Math.PI*2;
+    this.vx = Math.cos(dir)*v;
+    this.vy = Math.sin(dir)*v;
+    this.rot = (Math.random()-0.5)*0.04;
+  }
+
+  dibuja(){
+    const grad = contexto.createRadialGradient(
+      this.posx,this.posy,this.radio*0.2,
+      this.posx,this.posy,this.radio
+    );
+    grad.addColorStop(0,"#777");
+    grad.addColorStop(1,"#333");
+
+    contexto.fillStyle = grad;
+    contexto.strokeStyle = "#111";
+    contexto.lineWidth = 2;
+
+    contexto.beginPath();
+    for(let i=0;i<this.lados;i++){
+      const ang = (i/this.lados)*Math.PI*2 + this.angulo;
+      const r = this.radio*this.puntas[i];
+      const x = this.posx + Math.cos(ang)*r;
+      const y = this.posy + Math.sin(ang)*r;
+      if(i===0) contexto.moveTo(x,y);
+      else contexto.lineTo(x,y);
+    }
+    contexto.closePath();
+    contexto.fill();
+    contexto.stroke();
+  }
+
+  mueve(){
+    this.angulo += this.rot;
+    this.posx += this.vx;
+    this.posy += this.vy;
+
+    if(this.posx-this.radio<0 || this.posx+this.radio>anchura)
+      this.vx = -this.vx;
+    if(this.posy-this.radio<0 || this.posy+this.radio>altura)
+      this.vy = -this.vy;
+  }
+}
+
+// ================= JUEGO =================
+const jugador = new Jugador();
+let estrellas = Array.from({length:120},()=>new Estrella());
+let balas = [];
+let rocas = [];
+
+let level = 1;
+let rocksPerLevel = 10;
+let levelMessageTimer = 120;
+
+function spawnRocas(n){
+  for(let i=0;i<n;i++) rocas.push(new Roca());
+}
+function startLevel(){
+  rocas.length=0;
+  spawnRocas(rocksPerLevel);
+  levelMessageTimer=120;
+}
+startLevel();
+
+// ================= CONTROLES =================
+let giro=0;
+let thrust=false;
+
+document.body.onkeydown = e=>{
+  if(e.key==="a") giro=-1;
+  if(e.key==="d") giro=1;
+  if(e.key==="w") thrust=true;
+  if(e.code==="Space")
+    balas.push(new Bala(jugador.posx,jugador.posy,jugador.angulo));
+};
+document.body.onkeyup = e=>{
+  if(e.key==="a" && giro===-1) giro=0;
+  if(e.key==="d" && giro===1) giro=0;
+  if(e.key==="w") thrust=false;
+};
+
+// ================= BUCLE =================
+function drawLevelText(){
+  if(levelMessageTimer<=0) return;
+  contexto.save();
+  contexto.font="bold 48px sans-serif";
+  contexto.textAlign="center";
+  contexto.textBaseline="middle";
+  contexto.shadowColor="cyan";
+  contexto.shadowBlur=25;
+  contexto.fillStyle="cyan";
+  contexto.fillText(`LEVEL ${level}`,anchura/2,altura*0.2);
+  contexto.restore();
+  levelMessageTimer--;
+}
+
+function bucle(){
+
+  jugador.angulo += giro*0.08;
+  jugador.aplicaThrust(thrust);
+
+  // Fondo degradado
+  const grad = contexto.createRadialGradient(
+    anchura/2,altura/2,100,
+    anchura/2,altura/2,anchura
+  );
+  grad.addColorStop(0,"#050510");
+  grad.addColorStop(1,"#000000");
+  contexto.fillStyle=grad;
+  contexto.fillRect(0,0,anchura,altura);
+
+  estrellas.forEach(e=>e.dibuja());
+
+  rocas.forEach(r=>{r.dibuja(); r.mueve();});
+  balas.forEach(b=>{b.dibuja(); b.mueve();});
+
+  jugador.mueve();
+  jugador.dibuja();
+
+  for(let i=rocas.length-1;i>=0;i--){
+    for(let j=balas.length-1;j>=0;j--){
+      if(distancia(balas[j].posx,balas[j].posy,
+        rocas[i].posx,rocas[i].posy) < rocas[i].radio){
+        rocas.splice(i,1);
+        balas.splice(j,1);
+        break;
+      }
+    }
+  }
+
+  for(let j=balas.length-1;j>=0;j--){
+    if(balas[j].posx<0||balas[j].posx>anchura||
+       balas[j].posy<0||balas[j].posy>altura)
+      balas.splice(j,1);
+  }
+
+  if(rocas.length===0){
+    level++;
+    rocksPerLevel*=2;
+    startLevel();
+  }
+
+  // HUD
+  contexto.save();
+  contexto.fillStyle="rgba(0,0,0,0.5)";
+  contexto.fillRect(10,10,140,40);
+  contexto.fillStyle="cyan";
+  contexto.font="18px monospace";
+  contexto.fillText(`LEVEL ${level}`,20,35);
+  contexto.restore();
+
+  drawLevelText();
+
+  requestAnimationFrame(bucle);
+}
+
+requestAnimationFrame(bucle);
+
+</script>
+</body>
+</html>

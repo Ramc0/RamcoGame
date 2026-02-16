@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            body, html{
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background: #111;
+            }
+            canvas {
+                display: block;
+                margin: auto;
+                background: #222;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas width="512" height="512"></canvas>
+        <script>
+            const lienzo=document.querySelector("canvas");
+            const ctx=lienzo.getContext("2d");
+            const anchura=512;
+            const altura=512;
+            const tamBloque=64;
+
+            //Sprites
+            const fondo = new Image();
+            fondo.src= "background.png";
+            const spriteSkeleton = new Image();
+            spriteSkeleton.src= "spritesheet.png";
+            const spriteGhost = new Image();
+            spriteGhost.src= "fantasma.png";
+            const corazon = new Image();
+            corazon.src= "corazon.png";
+            const ataud = new Image();
+            ataud.src= "ataud.png";
+
+            //Variables
+            let nivel=1;
+            let vidas=3;
+            let juegoTerminado=false;
+            let mensaje="";
+
+            //Clase
+            class Esqueleto{
+                constructor(x, y, ancho, alto, sprite) {
+                    this.x=x;
+                    this.y=y;
+                    this.ancho=ancho;
+                    this.alto=alto;
+                    this.frame=0;
+                    this.dir=0;
+                    this.sprite=sprite;
+                }
+
+                dibujar(ctx) {
+                    ctx.drawImage(
+                        this.sprite,
+                        this.frame*tamBloque,
+                        this.dir*tamBloque,
+                        tamBloque,tamBloque,
+                        this.x,this.y,
+                        this.ancho,this.alto
+                    );
+                }
+
+                animar() {
+                    this.frame=(this.frame+1)%4;
+                }
+
+                mover(direccion){
+                    this.animar();
+                    switch (direccion){
+                        case "arriba":
+                        this.y -= tamBloque/2;
+                        this.dir= 0;
+                        break;
+                        case "abajo":
+                        this.y += tamBloque/2;
+                        this.dir= 2;
+                        break;
+                        case "izquierda":
+                        this.x -= tamBloque/2;
+                        this.dir= 1;
+                        break;
+                        case "derecha":
+                        this.x += tamBloque/2;
+                        this.dir= 3;
+                        break;
+                    }
+
+                    this.x = Math.max(0, Math.min(this.x, anchura-this.ancho));
+                    this.y = Math.max(0, Math.min(this.y, altura-this.alto));
+                }
+
+                reiniciar(){
+                    this.x= anchura/2-this.ancho/2;
+                    this.y= altura-this.alto-5;
+                }
+            }
+
+            const esqueleto = new Esqueleto(
+                anchura/2-tamBloque/2,
+                altura-tamBloque-5,
+                tamBloque,
+                tamBloque,
+                spriteSkeleton
+            );
+
+            //Fantasmas
+            function crearFantasmas(mult){
+                return [
+                {x: 0, y: 400, w: 64, h: 48, vel: 1.6* mult},
+                {x: 250, y: 290, w: 64, h: 48, vel: -1.8* mult},
+                { x: 80, y: 180, w: 64, h: 48, vel: 1.7* mult},
+                {x: 200, y: 70, w: 64, h: 48, vel: -1.5* mult}
+                ];
+            }
+            let fantasmas = crearFantasmas(1);
+
+            const meta = { x: anchura / 2 - 40, y: 15, ancho: 80, alto: 80 };
+
+
+            //Colision
+            function colision(a, b){
+                const margenX = b.w * 0.25;
+                const margenY = b.h * 0.25;
+                const bx = b.x + margenX;
+                const by = b.y + margenY;
+                const bw = b.w - margenX * 2;
+                const bh = b.h - margenY * 2;
+                return (
+                a.x < bx + bw &&
+                a.x + a.ancho > bx &&
+                a.y < by + bh &&
+                a.y + a.alto > by
+                );
+            }
+
+            //Dibuja
+            function dibuja(){
+                ctx.clearRect(0, 0, anchura, altura);
+                ctx.drawImage(fondo, 0, 0, anchura, altura);
+                ctx.drawImage(ataud, meta.x, meta.y, meta.ancho, meta.alto);
+
+                fantasmas.forEach(f => ctx.drawImage(spriteGhost, f.x, f.y, f.w, f.h));
+                esqueleto.dibujar(ctx);
+
+                ctx.fillStyle = "white";
+                ctx.font = "18px Arial";
+                ctx.fillText(`Nivel: ${nivel}`, 20, 30);
+                for (let i = 0; i < vidas; i++) {
+                ctx.drawImage(corazon, anchura - 40 - i * 40, 10, 30, 30);
+                }
+
+                if (juegoTerminado){
+                const titulo = mensaje;
+                const subtitulo = "Pulsa ENTER para continuar";
+                ctx.font = "24px Arial";
+                const wTitulo = ctx.measureText(titulo).width;
+                ctx.font = "16px Arial";
+                const wSub = ctx.measureText(subtitulo).width;
+                const paddingX = 20, paddingY = 12;
+                const rectW = Math.max(wTitulo, wSub) + paddingX * 2;
+                const rectH = 24 + 16 + paddingY * 2 + 6;
+                const rectX = (anchura - rectW) / 2;
+                const rectY = (altura - rectH) / 2 - 10;
+
+                ctx.fillStyle = "rgba(0,0,0,0.7)";
+                ctx.fillRect(rectX, rectY, rectW, rectH);
+                ctx.fillStyle = "white";
+                ctx.font = "24px Arial";
+                ctx.fillText(titulo, anchura / 2 - wTitulo / 2, rectY + paddingY + 20);
+                ctx.font = "16px Arial";
+                ctx.fillText(subtitulo, anchura / 2 - wSub / 2, rectY + paddingY + 44);
+                }
+            }
+
+            //Actualizar
+            function actualiza(){
+                if (juegoTerminado) return;
+
+                fantasmas.forEach(f => {
+                f.x += f.vel;
+                if (f.vel > 0 && f.x > anchura + 80) f.x = -80;
+                if (f.vel < 0 && f.x < -80) f.x = anchura + 80;
+
+                if (colision(esqueleto, f)) {
+                    vidas--;
+                    if (vidas <= 0) {
+                    mensaje = "💀 Has perdido todas tus vidas";
+                    juegoTerminado = true;
+                    nivel = 1;
+                    } else {
+                    mensaje = `☠️ Te atrapó un fantasma ${vidas} vidas restantes`;
+                    juegoTerminado = true;
+                    }
+                }
+                });
+
+                const margenMetaY = meta.alto * 0.6;
+                if (
+                esqueleto.x + esqueleto.ancho / 2 > meta.x &&
+                esqueleto.x + esqueleto.ancho / 2 < meta.x + meta.ancho &&
+                esqueleto.y < meta.y + margenMetaY
+                ) {
+                mensaje = "🎉 ¡Nivel completado!";
+                juegoTerminado = true;
+                if (vidas < 3) vidas++;
+                }
+            }
+
+            //Movimiento
+            document.body.onkeydown = function (e){
+                if (juegoTerminado && e.key === "Enter") {
+                if (mensaje.includes("Nivel completado")) nivel++;
+                else if (mensaje.includes("perdido todas")) { vidas = 3; nivel = 1; }
+                iniciarNivel();
+                return;
+                }
+                if (juegoTerminado) return;
+
+                switch (e.key){
+                case "w":
+                case "ArrowUp": 
+                esqueleto.mover("arriba");
+                break;
+                case "s":
+                case "ArrowDown":
+                esqueleto.mover("abajo");
+                break;
+                case "a":
+                case "ArrowLeft": 
+                esqueleto.mover("izquierda");
+                break;
+                case "d":
+                case "ArrowRight": 
+                esqueleto.mover("derecha");
+                break;
+                }
+            };
+
+            //Subir nivel
+            function iniciarNivel(){
+                esqueleto.reiniciar();
+                fantasmas = crearFantasmas(1+(nivel-1)*0.3);
+                juegoTerminado = false;
+                mensaje = "";
+            }
+
+            //Bucle
+            function bucle(){
+                actualiza();
+                dibuja();
+                requestAnimationFrame(bucle);
+            }
+
+            bucle();
+
+        </script>
+    </body>
+</html>
